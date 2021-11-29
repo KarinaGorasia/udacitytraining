@@ -48,7 +48,10 @@ Random Forest with bucketed variables, dummies and log transformed target | 0.21
     When looking across months, the winter months were unsurprisingly quieter. 
     c. Does demand fluctuate across daytime?
     However when we separate weekends from weekdays, we see that peak commuting hours signal higher bike demand on weekdays, whereas weekend hire follows a more normal distribution. This is a useful factor to consider.
- 
+
+2. What does bike sharing demand look like? Is it consistent?
+The distribution of bikes hired has a very positive skew, i.e. there are many more records showing lower levels of bike demand. This poses an issue because model performance, particularly in regression models, is negatively impacted by skewed data. Such models treat the skewed values almost like outliers and generally provide poor predictions for such cases, bringing down accuracy. Hence it would be in our favour to log transform the target variable, particular for regression modelling. Note that after transformation, there is still a skew in the data, demonstrating that demand is not consistent and not the easiest to predict!
+
 3. How well can we predict bike share demand? 
 It's clear that modelling bike sharing demand is no easy feat. Though we did find some factors repeatedly useful in helping understand and predict demand (temperatures, time of day), in spite of trying different modelling methods and approaches such as scaling, dummying difference variables and log transformation, it stills proves a challenge to accurately predict bike sharing demand. We also see that performance in validation drops greatly, signalling there is some clear overfitting happening during training. Linear Regression is arguably not the way forwads for this problem, though we have demonstrated that considering many features at different levels of granularity (datetime) and exploring different models, we can work towards understanding bike sharing demand more.
 

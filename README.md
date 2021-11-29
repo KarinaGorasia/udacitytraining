@@ -29,11 +29,8 @@ The features were explored individually compared with the target variable, as we
 ## Data Modeling
 Three models are evaluated in this work, each with varying performance:
 Model | Training RMSLE | Validation RMSLE | 
---- | --- | --- | --- |--- |--- |--- |--- |--- |--- |--- |---
 Linear Regression, log transformed target | 0.270600 | 1.089280 | 
---- | --- | --- | --- |--- |--- |--- |--- |--- |--- |--- |---
 Random Forest with bucketed variables, no dummies, no log transformed target | 0.696200 | 0.807400 | 
---- | --- | --- | --- |--- |--- |--- |--- |--- |--- |--- |---
 Random Forest with bucketed variables, dummies and log transformed target | 0.215500 | 0.735010 |
 
 ## Evaluate the Results

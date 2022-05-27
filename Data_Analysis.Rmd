@@ -1,0 +1,371 @@
+---
+title: "FT Customer Analysis"
+author: "Karina Gorasia"
+date: "May 2022"
+output:   
+  html_document:
+    code_folding: hide
+    fig_width:  16
+    fig_height: 12
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+library(DT)
+library(dplyr)
+library(janitor)
+library(data.table)
+library(stringr)
+library(tidyr)
+library(ggplot2)
+library(plotly)
+library(scales)
+library(cowplot)
+library(networkD3)
+library(reactable)
+source("Data_Preparation.R")
+```
+
+This analysis.    
+ 
+1. How’s the Balance distributed across customers?  
+2. Does the level of activity of a customer (IsActiveMember column) affect how they churn? How significant is this relationship?  
+3. Can you create a model that predicts the probability for a customer to churn?  
+
+### Key findings
+(1) 
+(2) 
+(3) 
+  
+#### Let's break these findings down to understand how we reached these conclusions.
+
+(1) 
+
+
+Notes:  
+balance by geography - note there are twice as many customers in X than in Y and Z
+- when scatterplot by balance and age, theres no real pattern
+-  Age doesn't show a pattern but age groups do. Split by age groups, roughly even buckets - split this way as it's something thats easily understandable to people. If I were to rerun this analysis in a more formal manner I would either create more data driven buckets or consult with business SMEs to determine groups of importance. Splitting by age this way could be helpful as you could target groups who use certain spaces more e.g. under 30s use the 'community' space most - how can we put more useful content to encourage greater balances/investing for that audience vs. 30s in geog Y have a greater upper whisker than any other grouping - what content are they exposed to that is encouraging them to invest more, what learnings are here? How can we leverage this?
+
+#### 1. How’s the Balance distributed across customers?  
+
+- Geography Z customers have in general a higher balance than those in X and Y across their customers  
+- Geography X and Y have up to 25% customers with no balance, and otherwise quite a spread with similar distributions  
+- Geography X and Y top 25% have a greater spread of balance into higher values, where the spread in geog Y is smaller and those with greater balances are considered outliers  
+- Signals that geog Z is overall a high value customer base, and the top quartiles of geog X and Y should similarly be paid special attention to retain valuable customers  
+
+```{r fig.height=5, fig.width=8, fig.align='center', warning=FALSE}
+ggplotly(
+  df_analysis %>% 
+    select(Balance, Geography) %>%
+    ggplot(., aes(y = Balance, x=Geography, fill= Geography)) + 
+    geom_boxplot() +
+    theme_bw() + 
+    theme(legend.position = "none") +
+    ggtitle("Distribution of Balance by Geography") +
+    theme(axis.title.x = element_text(margin=margin(-15,0,0,0)),
+          axis.title.y = element_text(margin=margin(-15,0,0,0)))
+)
+```
+
+Identifying these valuable areas, we want to ensure we aren't losing these customers. When we break this down further by those who have churned, we can see we are actually seeing those more valuable customers leaving the business and the spread of those who remain have relatively lower balances. for example, up to 50% those customers who have not churned in geog Y have 0 balance, comparatively only 25% of customers in this geography who have churned had no balance. 
+
+```{r fig.height=6, fig.width=10, fig.align='center', warning=FALSE}
+ggplotly(
+  df_analysis %>% 
+    select(Balance, Geography, Churned) %>%
+    ggplot(., aes(y = Balance, x=Geography, fill= Geography)) + 
+    geom_boxplot() +
+    facet_wrap(~Churned) +
+    theme_bw() + 
+    ggtitle("Balance by Geography and Churn Status") +
+    theme(axis.title.x = element_text(margin=margin(-15,0,0,0)),
+          axis.title.y = element_text(margin=margin(-15,0,0,0)))
+)
+```
+
+
+When we look across age buckets we don't see any major differences in balances, however when we break this down further by Churn status, we see that for the under 30 and 30's group, we are losing customers with greater balances, as demonstrated by the Q1 and medians being higher in these age groups under churn. Of particular concern in the under 30s, where up to 25% non churners have 0 balance, the equivalent quartile of churners had 70k balances.
+
+```{r fig.height=6, fig.width=10, fig.align='center', warning=FALSE}
+ggplotly(
+  df_analysis %>% 
+    mutate(age_bucket = ifelse(Age <= 30, "Under 30s",
+                               ifelse(Age <= 40, "30s","Over 30s"))) %>%
+    mutate_at(c("age_bucket"), list(~factor(., levels=c("Under 30s","30s","Over 30s")))) %>%
+    select(Balance, age_bucket, Churned) %>%
+    ggplot(., aes(y = Balance, x=age_bucket, fill=age_bucket)) + 
+    facet_grid(~Churned) +
+    geom_boxplot() +
+    theme_bw() + 
+    ggtitle("Balance by Age Bucket and Churn Status") +
+    theme(axis.text.x = element_text(margin=margin(-15,0,0,0)),
+          axis.title.x = element_text(margin=margin(-15,0,0,0)),
+          axis.title.y = element_text(margin=margin(-15,0,0,0)))
+) 
+```
+
+When we assess the churn across age and geography, by looking at the % of the population for each age group, we see that after 30 more customers of the total population tend to churn, however this is particularly prevalent in geog Z where the churn growth is steeper from this age. This demonstrates that the possibility of a trend where the older a customer, the more likely they are to churn, particularly for geog Z.  
+  
+  
+
+```{r fig.height=6, fig.width=10, fig.align='center', message=FALSE, warning=FALSE}
+ggplotly(
+  df_analysis %>% 
+    select(Age, Churned, Geography) %>% 
+    ungroup %>%
+    group_by(Age, Churned, Geography) %>% 
+    summarise(n=n()) %>% 
+    group_by(Age, Churned, Geography) %>% 
+    ggplot(., aes(x=Age, y=n, fill=Churned)) + 
+    geom_bar(position = "fill", stat = "identity")  + 
+    facet_wrap(~Geography) + 
+    ggtitle("% of Total Customers Churning by Age and Geography") +
+    scale_y_continuous(labels = scales::percent) 
+) 
+
+```
+
+Not everyone with 0 balance is churned.  
+  
+  
+```{r fig.height=4, fig.width=8, fig.align='center', warning=FALSE}
+ggplotly(
+  df_analysis %>% 
+    mutate(ZeroBalance = ifelse(Balance==0,"No Balance","Positive Balance")) %>%
+    select(ZeroBalance, Churned) %>%
+    ggplot(., aes(x = ZeroBalance, fill=ZeroBalance)) + 
+    facet_wrap(~Churned, scales = 'free_x') +
+    geom_bar() +
+    theme_bw() + 
+    ggtitle("Count of Customers with Zero or Positive Balance, by Churn Status") +
+    theme(legend.position = "none")
+) 
+```
+
+
+ADD WATERFALL CHART HERE OF FACTORS SPLITTING UP AND LEADING INTO CHURN/NO CHURN - SEE LINK WHATSAPP
+
+```{r}
+#sankeyNetwork(Links = links, 
+#              Nodes = nodes, 
+#              Source = "source",
+#              Target = "target", 
+#              Value = "value", 
+#              NodeID = "name",
+#              units = "TWh", # optional units name for popups
+#              fontSize = 12, 
+#              nodeWidth = 30)
+
+```
+
+
+
+##### 2. Does the level of activity of a customer (IsActiveMember column) affect how they churn? How significant is this relationship?  
+
+Not everyone who is inactive has churned, and not everyone who has churned is inactive. This leads me to assume that 'churned' does not mean a customer has left the business entirely and does not use the app at all, rather IsActiveMember is a defined period for a which a user can surpass but still be a part of the business. essentially they are dormant.   
+  
+  
+```{r fig.height=4, fig.width=8, fig.align='center', warning=FALSE}
+ggplotly(
+  df_analysis %>% 
+    select(Churned, IsActiveMember) %>%
+    ggplot(., aes(x = IsActiveMember, fill=IsActiveMember)) + 
+    facet_wrap(~Churned, scales = 'free_x') +
+    geom_bar() +
+    theme_bw() + 
+    ggtitle("Count of Customers: By Activity Status and Churn Status") 
+) 
+```
+
+Are those inactive, churned customers the zero balance account holders? No. The balances of those who are active and churned are not dissimilar to those who are inactive and churned.  
+  
+  
+
+```{r fig.height=5, fig.width=8, fig.align='center', warning=FALSE}
+ggplotly(
+  df_analysis %>% 
+    select(Balance, IsActiveMember, Churned) %>%
+    ggplot(., aes(y = Balance, x=IsActiveMember, fill=IsActiveMember)) + 
+    facet_grid(~Churned) +
+    geom_boxplot() +
+    theme_bw() + 
+    ggtitle("Balance by Activity and Churn Status") +
+    theme(axis.text.x = element_text(margin=margin(-15,0,0,0)),
+          axis.title.x = element_text(margin=margin(-15,0,0,0)),
+          axis.title.y = element_text(margin=margin(-15,0,0,0)))
+) 
+```
+
+Running a statistical test to assess this, we see that the relationship between IsActiveMember and Churned variables is very significant. The odds of churning are 51% lower if you are an active member. Probability of churn is hence reduced when users are active.
+
+```{r}
+#2. Does the level of activity of a customer (IsActiveMember column) affect how they churn? How significant is this relationship?
+set.seed(42)
+fit_data <- df_analysis %>% 
+  select(IsActiveMember, Churned)
+fit <- glm(Churned ~ IsActiveMember, data=fit_data, family=binomial)
+#summary(fit)
+
+# Interpretation of values:
+#odds_ratio <- exp(coef(fit))
+#odds_ratio
+#percent_change_in_odds <- (odds_ratio - 1)*100
+#percent_change_in_odds
+
+```
+
+##### 3. Can you create a model that predicts the probability for a customer to churn?
+
+```{r fig.height=5, fig.width=8, fig.align='center', warning=FALSE}
+# would create a function in future / if i had more time - currently very manual
+features = c("CreditScore", "GenderMale", "Age", "NumOfProducts_Only11", "IsActiveMember1", "Geography_Z1")
+perc_change_in_odds = c(round(percent_change_in_odds2[2][1][[1]],1), 
+                        round(percent_change_in_odds2[3][1][[1]],1),
+                        round(percent_change_in_odds2[4][1][[1]],1),
+                        round(percent_change_in_odds2[5][1][[1]],1),
+                        round(percent_change_in_odds2[6][1][[1]],1),
+                        round(percent_change_in_odds2[7][1][[1]],1))
+model_output_df  <- data.frame(features,perc_change_in_odds)
+
+ggplotly(
+  ggplot(model_output_df, aes(x=perc_change_in_odds, y=features)) +
+    geom_bar(stat='identity', aes(fill=features)) +
+    labs(subtitle="The odds of churning increase or decrease by the following percentages",
+         title= "Significant Model Features for Churning - % Change in Odds") 
+)
+
+
+```
+
+Though these features are useful to know in profiling customers more likely to churn, it's important to note that this model was not very performant and determine the cost to business to utilise this solution in it's present format. If we see below, though accuracy is high, it is not the most useful metric here as the data is in any case imbalanced and we would expect to correctly find many non-churners. 
+
+```{r}
+accuracy_test
+table(actual = test$Churned, predicted = test$pred_class)
+
+```
+
+What we want to see moreso is that we are accuractely predicting as many churners and not missing too many, and also that of our guesses, most of them are correct and we're not wasting effort too greatly on customers who in any case would not have actually churned.  
+The first metric below (recall) demonstrate the number of predicted churners over the total number of churners. This is quite low, and though better than no churn model, could use improvement.  
+The second metric (precision) shows what precentage of the churn predictions were correct. This is useful in assessing costs re. remediation. 
+  
+  
+```{r}
+paste("Recall", round(Recall,2), sep=": ")
+paste("Precision", round(Precision,2), sep=": ")
+```
+
+
+
+
+
+#### What would the next steps be following this analysis?  
+##### from a technical standpoint:  
+- improve model with:   
+    - further samples (more for model to learn from and potentially more churners to learn from);   
+    - more features (to understand better division between churner and non churners);   
+    - additional data sources e.g. activity data (how is customer purchasing), app usage metrics, transactional data to assess behavioural trends  
+- try other modelling approaches to improve performance and churn detection (Random forest is non-linear, also KNN)  
+- use SMOTE to balance dataset better    
+
+##### from business perspective:  
+- if low cost:  
+    - run trial to assess how many customers can be saved using model vs. current baseline approach, targeting those with highest churn prob  
+    - target customers with features highlighted as significant  
+
+
+#### Assumptions:    
+- Churn does not mean a user has left the business entirely, rather it means they have not completed some key action or behaviour, have given notice to close their account but this action has not yet completed, other features do not coincide with the same timeframe as churned feature, or otherwise. This is because ~7% of active users have been classified as churned. If Churn meant a customer had left the business entirely, they would then not be a user at all and hence not be active - which is a juxtaposition. Similarly, inactivity is not complete usage stop of the app, rather a threshold which can be surpassed but a customer is still a part of the business.
+- 
+
+Thank you.  
+
+
+==========================================================================================================================================  
+
+Extra adhoc analyses/charts
+
+Determine balance of dataset re. target
+```{r message=FALSE, warning=FALSE}
+df_analysis %>% 
+  mutate(n_custs= n_distinct(CustomerId)) %>%
+  group_by(Churned) %>% 
+  summarise(n = n_distinct(CustomerId)/n_custs) %>%
+  distinct()
+
+```
+
+Balance by Tenure by Geography
+```{r fig.height=6, fig.width=10, message=FALSE, warning=FALSE}
+ggplotly(
+  df_analysis %>%
+    #mutate(age_bucket = ifelse(Age <= 30, "Under 30s",
+    #                           ifelse(Age <= 40, "30s","Over 30s"))) %>%
+    #mutate_at(c("age_bucket"), list(~factor(., levels=c("Under 30s","30s","Over 30s")))) %>%
+    select(Balance, Tenure, Geography) %>%
+    group_by(Tenure, Geography) %>%
+    summarise(avg_balance_tenure = mean(Balance)) %>%
+    ggplot(., aes(x = Tenure, y =  avg_balance_tenure, color=Geography)) +
+      facet_grid(rows=vars(Geography), scales = 'free_y') +
+      geom_line() +
+      theme_bw() +
+      ggtitle("Customer Balances: By Tenure and Geography") +
+      theme(legend.position = "none") +
+    scale_x_continuous(breaks= pretty_breaks())
+)
+
+```
+
+In geographies X and Y, customers tend to start churning in the mid 30s at a fairly even drop off level, however in geog Z this pattern is more prevalent - done as percentage / 100 chart to show this trend better.
+
+```{r fig.height=6, fig.width=10, message=FALSE, warning=FALSE}
+ggplot(df_analysis, aes(Age)) + 
+  geom_histogram(aes(fill = Churned), color = "black", binwidth = 2) + 
+    theme_bw() + 
+    ggtitle("Distribution of customers by Age and Geography") +
+  facet_grid(rows=vars(Geography), scales = 'free_y') 
+```
+
+proportions i.e. # active / # in geog
+
+```{r message=FALSE, warning=FALSE}
+df_analysis %>%
+  mutate(count_of_custs=n()) %>%
+  group_by(Geography) %>%
+  summarise(cust_distrib_by_geog = n()/count_of_custs) %>% 
+  distinct()
+
+df_analysis %>%
+  select(IsActiveMember, Geography) %>%
+  group_by(Geography) %>%
+  mutate(custs_by_geog=n()) %>%
+  group_by(IsActiveMember, Geography) %>%
+  summarise(active_cust_prop = n()/custs_by_geog) %>% 
+  distinct()
+
+df_analysis %>%
+  select(Churned, Geography) %>%
+  group_by(Geography) %>%
+  mutate(custs_by_geog=n()) %>%
+  group_by(Churned, Geography) %>%
+  summarise(churned_cust_prop= n()/custs_by_geog) %>% 
+  distinct() %>%
+  arrange(Geography)
+
+```
+
+
+Do customers with more products have greater balances? Do we need to invest more time on selling our different products vs. investment advice for example?
+
+  
+    
+      
+        
+          
+
+
+
+
+
